@@ -1,0 +1,150 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  STUDENT
+}
+
+enum FeeStatus {
+  PAID
+  UNPAID
+  PENDING
+}
+
+enum QuizType {
+  MCQ
+  TRUE_FALSE
+  SHORT_ANSWER
+  CASE_STUDY
+  ASSERTION_REASON
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(STUDENT)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  student   Student?
+}
+
+model Student {
+  id             String         @id @default(uuid())
+  userId         String         @unique
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rollNumber     String         @unique
+  class          String
+  batch          String
+  subjects       String[]
+  parentContact  String
+  attendancePct  Float          @default(0.0)
+  feeStatus      FeeStatus      @default(UNPAID)
+  rank           Int            @default(0)
+  accuracyPct    Float          @default(0.0)
+  xpPoints       Int            @default(0)
+  quizStreak     Int            @default(0)
+  badges         String[]
+  attendances    Attendance[]
+  feeHistory     FeeHistory[]
+  quizAttempts   QuizAttempt[]
+  notifications  Notification[]
+  aiReports      AIReport[]
+  quizzes        Quiz[]
+}
+
+model Attendance {
+  id        String   @id @default(uuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      DateTime
+  status    Boolean  // true = Present, false = Absent
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, date])
+}
+
+model FeeHistory {
+  id         String    @id @default(uuid())
+  studentId  String
+  student    Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  amount     Float
+  month      String    // e.g. "May 2026"
+  dueDate    DateTime
+  paidDate   DateTime?
+  status     FeeStatus @default(UNPAID)
+  receiptUrl String?
+}
+
+model Quiz {
+  id          String        @id @default(uuid())
+  title       String
+  description String?
+  type        QuizType
+  batch       String
+  subject     String
+  durationMin Int
+  questions   Json          // JSON array of question objects (Question[])
+  difficulty  String        // "EASY", "MEDIUM", "HARD", "ADAPTIVE"
+  isAiGenerated Boolean     @default(false)
+  sourceFile  String?       // PDF name / Notes title if generated
+  createdAt   DateTime      @default(now())
+  attempts    QuizAttempt[]
+  studentId     String?
+  student       Student?      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model QuizAttempt {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  quizId      String
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  score       Float
+  totalQuestions Int
+  correctAnswers Int
+  accuracyPct Float
+  xpGained    Int
+  answers     Json     // Selected answers
+  completedAt DateTime @default(now())
+}
+
+model StudyMaterial {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  fileType    String   // "PDF" | "Notes" | "Homework" | "Assignment"
+  fileUrl     String?  // null for written notes (content stored inline instead)
+  content     String?  // HTML body for notes written in the rich text editor
+  subject     String
+  batch       String
+  uploadedAt  DateTime @default(now())
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  studentId   String?  // Null means global announcement
+  student     Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  read        Boolean  @default(false)
+  type        String   // "QUIZ" | "FEE" | "ATTENDANCE" | "SYSTEM"
+  createdAt   DateTime @default(now())
+}
+
+model AIReport {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  weakTopics  String[]
+  strongTopics String[]
+  suggestions String[]
+  generatedAt DateTime @default(now())
+}

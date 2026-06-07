@@ -1,0 +1,46 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 452 >>
+stream
+BT
+/F1 16 Tf
+72 740 Td
+20 TL
+(Electrostatics Formula Sheet) Tj
+T* () Tj
+T* (Coulomb's Law:  F = k * q1 * q2 / r^2     \(k = 9e9 N m^2 / C^2\)) Tj
+T* (Electric Field:  E = F / q = k * Q / r^2) Tj
+T* (Electric Potential:  V = k * Q / r) Tj
+T* (Potential Energy:  U = k * q1 * q2 / r) Tj
+T* (Capacitance:  C = Q / V) Tj
+T* (Parallel Plate:  C = e0 * A / d) Tj
+T* (Energy in Capacitor:  U = 1/2 * C * V^2) Tj
+T* (Gauss's Law:  flux = Q_enclosed / e0) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+814
+%%EOF

@@ -1,0 +1,196 @@
+@import "tailwindcss";
+
+:root {
+  --background: #060913;
+  --foreground: #f8fafc;
+  --card: rgba(13, 20, 38, 0.65);
+  --card-border: rgba(99, 102, 241, 0.12);
+  --card-border-hover: rgba(168, 85, 247, 0.35);
+  --primary: #6366f1;
+  --primary-rgb: 99, 102, 241;
+  --secondary: #a855f7;
+  --secondary-rgb: 168, 85, 247;
+  --accent: #06b6d4;
+  --muted: #64748b;
+  --muted-foreground: #94a3b8;
+  --border: rgba(255, 255, 255, 0.06);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --destructive: #f43f5e;
+  
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-destructive: var(--destructive);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+/* Base resets & styles */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Custom premium styles */
+.cyber-grid {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(99, 102, 241, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
+}
+
+.cyber-grid-dense {
+  background-size: 20px 20px;
+  background-image: 
+    linear-gradient(to right, rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+}
+
+.radial-glow {
+  background: radial-gradient(circle 800px at 50% 200px, rgba(99, 102, 241, 0.12), transparent 80%);
+}
+
+.radial-glow-purple {
+  background: radial-gradient(circle 600px at 100% 10%, rgba(168, 85, 247, 0.08), transparent 80%);
+}
+
+.glass-card {
+  background: var(--card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: var(--card-border-hover);
+  box-shadow: 0 8px 32px 0 rgba(168, 85, 247, 0.08), 0 0 15px 0 rgba(99, 102, 241, 0.1);
+}
+
+.glass-input {
+  background: rgba(13, 20, 38, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  transition: all 0.2s ease-in-out;
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: rgba(13, 20, 38, 0.6);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(6, 9, 19, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.25);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.5);
+}
+
+/* Custom Animations */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Utility button glows */
+.btn-glow-primary:hover {
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.45);
+}
+
+.btn-glow-secondary:hover {
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.45);
+}
+
+/* Rich text editor placeholder */
+.rte-content:empty:before {
+  content: attr(data-placeholder);
+  color: #475569;
+  pointer-events: none;
+}
+
+/* Shared prose styling for written notes (editor + student reader) */
+.rte-prose h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0.9rem 0 0.5rem;
+}
+.rte-prose h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0.8rem 0 0.4rem;
+}
+.rte-prose p {
+  margin: 0.5rem 0;
+}
+.rte-prose ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+  margin: 0.5rem 0;
+}
+.rte-prose ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+  margin: 0.5rem 0;
+}
+.rte-prose li {
+  margin: 0.25rem 0;
+}
+.rte-prose a {
+  color: #818cf8;
+  text-decoration: underline;
+}
+.rte-prose blockquote {
+  border-left: 3px solid rgba(99, 102, 241, 0.5);
+  padding-left: 0.9rem;
+  margin: 0.7rem 0;
+  color: #94a3b8;
+  font-style: italic;
+}
+.rte-prose strong { color: #fff; font-weight: 700; }
