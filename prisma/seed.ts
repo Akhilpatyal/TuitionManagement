@@ -37,7 +37,7 @@ async function main() {
       email: 'admin@tuition.com',
       password: hashedPassword,
       role: Role.ADMIN,
-      name: 'Dr. Sarah Jenkins',
+      name: 'Akhil',
     },
   });
 

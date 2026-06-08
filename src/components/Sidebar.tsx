@@ -97,10 +97,10 @@ export default function Sidebar({ user, isOpen, setIsOpen }: SidebarProps) {
             </div>
             <div>
               <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-indigo-200 to-purple-400 bg-clip-text text-transparent">
-                APEX <span className="font-light text-slate-400">AI</span>
+                Acu <span className="font-light text-slate-400">Mind</span>
               </span>
               <p className="text-[10px] uppercase tracking-widest text-indigo-400 font-semibold font-mono">
-                SaaS Portal
+                Learning Portal
               </p>
             </div>
           </div>

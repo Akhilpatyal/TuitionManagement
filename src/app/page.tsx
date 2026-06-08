@@ -86,7 +86,7 @@ export default function LoginPage() {
           </div>
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
-              APEX <span className="font-light text-indigo-400">AI</span>
+              Acu <span className="font-light text-indigo-400">Mind</span>
             </h1>
             <p className="text-xs uppercase font-mono tracking-widest text-indigo-400 font-bold">
               Tuition Management Engine
@@ -108,7 +108,7 @@ export default function LoginPage() {
           <form onSubmit={onSubmit} className="space-y-5">
             {/* Email */}
             <div>
-              <label className="block text-xs font-mono text-slate-400 uppercase mb-2">Email Address</label>
+              <label className="block text-xs font-mono text-slate-400 uppercase mb-2">User Address</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                 <input
@@ -183,8 +183,8 @@ export default function LoginPage() {
 
       {/* Footer */}
       <footer className="py-6 border-t border-slate-900/40 text-center relative z-10 bg-slate-950/20">
-        <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">
-          © 2026 TuitorMonitor . SYSTEMS SECURED // AI MODELS INTEGRATED.
+        <p className="text-[11px] font-mono text-slate-500  tracking-widest">
+          © 2026 AcuMind . SYSTEMS SECURED // AI MODELS INTEGRATED.
         </p>
       </footer>
     </div>
