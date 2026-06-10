@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { Role } from '@prisma/client';
 
-// Recalculates student ranks globally based on accuracy and XP points
-export async function recalculateStudentRanks() {
+// Recalculates student ranks within an institute based on accuracy and XP points
+export async function recalculateStudentRanks(instituteId: string) {
   const students = await prisma.student.findMany({
+    where: { instituteId },
     orderBy: [
       { accuracyPct: 'desc' },
       { xpPoints: 'desc' }
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
     }
 
     const students = await prisma.student.findMany({
+      where: { instituteId: authResult.user.instituteId },
       include: {
         user: {
           select: { id: true, email: true, name: true }
@@ -43,7 +45,7 @@ export async function GET(req: NextRequest) {
       name: s.user.name, email: s.user.email,
       rollNumber: s.rollNumber, class: s.class, batch: s.batch,
       subjects: s.subjects, parentContact: s.parentContact,
-      attendancePct: s.attendancePct, feeStatus: s.feeStatus, rank: s.rank,
+      attendancePct: s.attendancePct, feeStatus: s.feeStatus, monthlyFee: s.monthlyFee, rank: s.rank,
       accuracyPct: s.accuracyPct, xpPoints: s.xpPoints,
       quizStreak: s.quizStreak, badges: s.badges
     }));
@@ -65,11 +67,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, email, rollNumber, class: className, batch, subjects, parentContact } = body;
+    const { name, email, rollNumber, class: className, batch, subjects, parentContact, monthlyFee } = body;
 
     if (!name || !email || !rollNumber || !parentContact) {
       return NextResponse.json({ error: 'Missing mandatory fields' }, { status: 400 });
     }
+
+    const instituteId = authResult.user.instituteId;
 
     const exists = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (exists) {
@@ -80,26 +84,29 @@ export async function POST(req: NextRequest) {
 
     const student = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
-        data: { email: email.toLowerCase(), password: hashedPassword, name, role: Role.STUDENT }
+        data: { email: email.toLowerCase(), password: hashedPassword, name, role: Role.STUDENT, instituteId }
       });
-      const count = await tx.student.count();
+      const count = await tx.student.count({ where: { instituteId } });
       return await tx.student.create({
         data: {
           userId: user.id, rollNumber, class: className, batch, subjects, parentContact,
+          monthlyFee: Number(monthlyFee) || 0,
           attendancePct: 100.0, rank: count + 1, accuracyPct: 0.0,
-          xpPoints: 100, quizStreak: 0, badges: ['Quick Starter']
+          xpPoints: 100, quizStreak: 0, badges: ['Quick Starter'],
+          instituteId
         }
       });
     });
 
-    await recalculateStudentRanks();
+    await recalculateStudentRanks(instituteId);
 
     await prisma.notification.create({
       data: {
         studentId: student.id,
-        title: 'Welcome to APEX Academy!',
+        title: 'Welcome to AcuMind!',
         message: 'Your student dashboard is active. Start practicing quizzes to gain XP.',
-        type: 'SYSTEM'
+        type: 'SYSTEM',
+        instituteId
       }
     });
 

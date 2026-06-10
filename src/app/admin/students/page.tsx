@@ -42,9 +42,26 @@ export default function StudentsManagement() {
   const [batch, setBatch] = useState('Alpha Batch');
   const [parentContact, setParentContact] = useState('');
   const [subjects, setSubjects] = useState<string[]>(['Physics']);
-  
-  // Available Subjects choices
-  const availableSubjects = ['Physics', 'Chemistry', 'Mathematics', 'Biology', 'English'];
+  const [monthlyFee, setMonthlyFee] = useState<number>(0);
+  const [customSubject, setCustomSubject] = useState('');
+
+  // Class choices: Grade 4 through Grade 12
+  const classOptions = Array.from({ length: 9 }, (_, i) => `Grade ${i + 4}`);
+
+  // Available subject choices (extensible — admins can add their own)
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([
+    'Physics', 'Chemistry', 'Mathematics', 'Biology', 'English',
+    'Computer Science', 'Economics', 'Accountancy', 'Business Studies',
+    'History', 'Geography', 'Hindi'
+  ]);
+
+  const addCustomSubject = () => {
+    const s = customSubject.trim();
+    if (!s) return;
+    if (!availableSubjects.includes(s)) setAvailableSubjects(prev => [...prev, s]);
+    if (!subjects.includes(s)) setSubjects(prev => [...prev, s]);
+    setCustomSubject('');
+  };
 
   const fetchStudents = async () => {
     try {
@@ -78,6 +95,8 @@ export default function StudentsManagement() {
     setBatch('Alpha Batch');
     setParentContact('');
     setSubjects(['Physics']);
+    setMonthlyFee(0);
+    setCustomSubject('');
     setIsAddOpen(true);
   };
 
@@ -96,7 +115,8 @@ export default function StudentsManagement() {
           class: className,
           batch,
           parentContact,
-          subjects
+          subjects,
+          monthlyFee
         })
       });
 
@@ -121,6 +141,14 @@ export default function StudentsManagement() {
     setBatch(student.batch);
     setParentContact(student.parentContact);
     setSubjects(student.subjects);
+    setMonthlyFee(student.monthlyFee || 0);
+    setCustomSubject('');
+    // Ensure any of the student's existing subjects are selectable
+    setAvailableSubjects(prev => {
+      const merged = [...prev];
+      student.subjects.forEach(s => { if (!merged.includes(s)) merged.push(s); });
+      return merged;
+    });
     setIsEditOpen(true);
   };
 
@@ -138,7 +166,8 @@ export default function StudentsManagement() {
           class: className,
           batch,
           parentContact,
-          subjects
+          subjects,
+          monthlyFee
         })
       });
 
@@ -288,6 +317,9 @@ export default function StudentsManagement() {
                       }`}>
                         {s.feeStatus}
                       </span>
+                      {s.monthlyFee > 0 && (
+                        <div className="text-[10px] text-slate-500 font-mono mt-1">₹{s.monthlyFee}/mo</div>
+                      )}
                     </td>
                     <td className="p-4 text-right pr-6">
                       <div className="flex items-center justify-end gap-2">
@@ -358,6 +390,7 @@ export default function StudentsManagement() {
                 <p><strong className="text-slate-400">Class:</strong> {selectedStudent.class}</p>
                 <p><strong className="text-slate-400">Batch:</strong> {selectedStudent.batch}</p>
                 <p><strong className="text-slate-400">Parent contact:</strong> {selectedStudent.parentContact}</p>
+                <p><strong className="text-slate-400">Monthly fee:</strong> {selectedStudent.monthlyFee > 0 ? `₹${selectedStudent.monthlyFee}` : 'Not set'} <span className="text-[10px] text-slate-500">({selectedStudent.feeStatus})</span></p>
                 <p>
                   <strong className="text-slate-400">Subjects assigned:</strong>
                   <span className="flex flex-wrap gap-1 mt-1">
@@ -471,8 +504,9 @@ export default function StudentsManagement() {
                     onChange={(e) => setClassName(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:outline-none"
                   >
-                    <option value="Grade 11">Grade 11</option>
-                    <option value="Grade 12">Grade 12</option>
+                    {classOptions.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -489,21 +523,34 @@ export default function StudentsManagement() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] uppercase font-mono text-slate-400 mb-1.5">Parent Contact Details</label>
-                <input
-                  type="text"
-                  required
-                  value={parentContact}
-                  onChange={(e) => setParentContact(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none"
-                  placeholder="+1 (555) 012-3456"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] uppercase font-mono text-slate-400 mb-1.5">Parent Contact Details</label>
+                  <input
+                    type="text"
+                    required
+                    value={parentContact}
+                    onChange={(e) => setParentContact(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none"
+                    placeholder="+1 (555) 012-3456"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-mono text-slate-400 mb-1.5">Monthly Fee (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={monthlyFee}
+                    onChange={(e) => setMonthlyFee(Math.max(parseFloat(e.target.value) || 0, 0))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none"
+                    placeholder="0"
+                  />
+                </div>
               </div>
 
               {/* Subjects Checklist */}
               <div>
-                <label className="block text-[10px] uppercase font-mono text-slate-400 mb-2">Subject Assignments</label>
+                <label className="block text-[10px] uppercase font-mono text-slate-400 mb-2">Subject & Stream Assignments</label>
                 <div className="flex flex-wrap gap-2">
                   {availableSubjects.map(subject => {
                     const isSelected = subjects.includes(subject);
@@ -523,6 +570,26 @@ export default function StudentsManagement() {
                       </button>
                     );
                   })}
+                </div>
+
+                {/* Add a custom subject / stream */}
+                <div className="flex gap-2 mt-2.5">
+                  <input
+                    type="text"
+                    value={customSubject}
+                    onChange={(e) => setCustomSubject(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomSubject(); } }}
+                    placeholder="Add a subject or stream (e.g. Sanskrit, Commerce)"
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none text-[11px]"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomSubject}
+                    className="flex items-center gap-1 px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 hover:bg-indigo-500/20 text-[11px] font-bold transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
                 </div>
               </div>
 

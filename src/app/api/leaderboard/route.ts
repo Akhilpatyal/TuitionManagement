@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     const sortBy = searchParams.get('sortBy') || 'XP'; // XP or ACCURACY
 
     const students = await prisma.student.findMany({
+      where: { instituteId: authResult.user.instituteId },
       include: {
         user: {
           select: {

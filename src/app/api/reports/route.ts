@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     }
 
     const report = await prisma.aIReport.findFirst({
-      where: { studentId: targetStudentId },
+      where: { studentId: targetStudentId, instituteId: authResult.user.instituteId },
       orderBy: { generatedAt: 'desc' }
     });
 

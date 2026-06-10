@@ -7,7 +7,10 @@ generator client {
 }
 
 enum Role {
+  SUPER_ADMIN
+  INSTITUTE_OWNER
   ADMIN
+  TEACHER
   STUDENT
 }
 
@@ -25,15 +28,37 @@ enum QuizType {
   ASSERTION_REASON
 }
 
+model Institute {
+  id           String          @id @default(uuid())
+  name         String
+  slug         String          @unique
+  logoUrl      String?
+  primaryColor String?
+  status       String          @default("ACTIVE") // ACTIVE | SUSPENDED
+  createdAt    DateTime        @default(now())
+
+  users         User[]
+  students      Student[]
+  attendances   Attendance[]
+  feeHistory    FeeHistory[]
+  quizzes       Quiz[]
+  quizAttempts  QuizAttempt[]
+  materials     StudyMaterial[]
+  notifications Notification[]
+  aiReports     AIReport[]
+}
+
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  role      Role     @default(STUDENT)
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  student   Student?
+  id          String     @id @default(uuid())
+  email       String     @unique
+  password    String
+  role        Role       @default(STUDENT)
+  name        String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  student     Student?
+  instituteId String
+  institute   Institute  @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }
 
 model Student {
@@ -47,6 +72,7 @@ model Student {
   parentContact  String
   attendancePct  Float          @default(0.0)
   feeStatus      FeeStatus      @default(UNPAID)
+  monthlyFee     Float          @default(0)
   rank           Int            @default(0)
   accuracyPct    Float          @default(0.0)
   xpPoints       Int            @default(0)
@@ -58,6 +84,8 @@ model Student {
   notifications  Notification[]
   aiReports      AIReport[]
   quizzes        Quiz[]
+  instituteId    String
+  institute      Institute      @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }
 
 model Attendance {
@@ -67,6 +95,8 @@ model Attendance {
   date      DateTime
   status    Boolean  // true = Present, false = Absent
   createdAt DateTime @default(now())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, date])
 }
@@ -81,6 +111,8 @@ model FeeHistory {
   paidDate   DateTime?
   status     FeeStatus @default(UNPAID)
   receiptUrl String?
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }
 
 model Quiz {
@@ -99,6 +131,8 @@ model Quiz {
   attempts    QuizAttempt[]
   studentId     String?
   student       Student?      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  instituteId   String
+  institute     Institute     @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }
 
 model QuizAttempt {
@@ -114,6 +148,8 @@ model QuizAttempt {
   xpGained    Int
   answers     Json     // Selected answers
   completedAt DateTime @default(now())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }
 
 model StudyMaterial {
@@ -126,6 +162,8 @@ model StudyMaterial {
   subject     String
   batch       String
   uploadedAt  DateTime @default(now())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }
 
 model Notification {
@@ -137,6 +175,8 @@ model Notification {
   read        Boolean  @default(false)
   type        String   // "QUIZ" | "FEE" | "ATTENDANCE" | "SYSTEM"
   createdAt   DateTime @default(now())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }
 
 model AIReport {
@@ -147,4 +187,6 @@ model AIReport {
   strongTopics String[]
   suggestions String[]
   generatedAt DateTime @default(now())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }

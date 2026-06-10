@@ -27,6 +27,13 @@ async function main() {
   await prisma.attendance.deleteMany({});
   await prisma.student.deleteMany({});
   await prisma.user.deleteMany({});
+  await prisma.institute.deleteMany({});
+
+  console.log('Seeding institute...');
+  const institute = await prisma.institute.create({
+    data: { name: 'Default Institute', slug: 'default', status: 'ACTIVE' },
+  });
+  const instituteId = institute.id;
 
   console.log('Seeding user nodes...');
   const hashedPassword = bcrypt.hashSync('password', 10);
@@ -38,6 +45,7 @@ async function main() {
       password: hashedPassword,
       role: Role.ADMIN,
       name: 'Akhil',
+      instituteId,
     },
   });
 
@@ -134,6 +142,7 @@ async function main() {
         password: hashedPassword,
         role: Role.STUDENT,
         name: s.name,
+        instituteId,
       },
     });
 
@@ -152,6 +161,7 @@ async function main() {
         xpPoints: s.xpPoints,
         quizStreak: s.quizStreak,
         badges: s.badges,
+        instituteId,
       },
     });
 
@@ -178,6 +188,7 @@ async function main() {
           studentId,
           date,
           status,
+          instituteId,
         },
       });
     }
@@ -186,13 +197,13 @@ async function main() {
   console.log('Seeding invoice ledger...');
   await prisma.feeHistory.createMany({
     data: [
-      { studentId: studentsMap['alex@tuition.com'], amount: 150, month: 'May 2026', dueDate: new Date('2026-05-10'), paidDate: new Date('2026-05-08'), status: FeeStatus.PAID, receiptUrl: '/receipts/f1.pdf' },
-      { studentId: studentsMap['sofia@tuition.com'], amount: 150, month: 'May 2026', dueDate: new Date('2026-05-10'), paidDate: new Date('2026-05-09'), status: FeeStatus.PAID, receiptUrl: '/receipts/f2.pdf' },
-      { studentId: studentsMap['marcus@tuition.com'], amount: 120, month: 'May 2026', dueDate: new Date('2026-05-10'), status: FeeStatus.PENDING },
-      { studentId: studentsMap['emily@tuition.com'], amount: 120, month: 'May 2026', dueDate: new Date('2026-05-10'), status: FeeStatus.UNPAID },
-      { studentId: studentsMap['ryan@tuition.com'], amount: 120, month: 'May 2026', dueDate: new Date('2026-05-10'), status: FeeStatus.UNPAID },
-      { studentId: studentsMap['alex@tuition.com'], amount: 150, month: 'April 2026', dueDate: new Date('2026-04-10'), paidDate: new Date('2026-04-09'), status: FeeStatus.PAID, receiptUrl: '/receipts/f6.pdf' },
-      { studentId: studentsMap['sofia@tuition.com'], amount: 150, month: 'April 2026', dueDate: new Date('2026-04-10'), paidDate: new Date('2026-04-10'), status: FeeStatus.PAID, receiptUrl: '/receipts/f7.pdf' },
+      { studentId: studentsMap['alex@tuition.com'], amount: 150, month: 'May 2026', dueDate: new Date('2026-05-10'), paidDate: new Date('2026-05-08'), status: FeeStatus.PAID, receiptUrl: '/receipts/f1.pdf', instituteId },
+      { studentId: studentsMap['sofia@tuition.com'], amount: 150, month: 'May 2026', dueDate: new Date('2026-05-10'), paidDate: new Date('2026-05-09'), status: FeeStatus.PAID, receiptUrl: '/receipts/f2.pdf', instituteId },
+      { studentId: studentsMap['marcus@tuition.com'], amount: 120, month: 'May 2026', dueDate: new Date('2026-05-10'), status: FeeStatus.PENDING, instituteId },
+      { studentId: studentsMap['emily@tuition.com'], amount: 120, month: 'May 2026', dueDate: new Date('2026-05-10'), status: FeeStatus.UNPAID, instituteId },
+      { studentId: studentsMap['ryan@tuition.com'], amount: 120, month: 'May 2026', dueDate: new Date('2026-05-10'), status: FeeStatus.UNPAID, instituteId },
+      { studentId: studentsMap['alex@tuition.com'], amount: 150, month: 'April 2026', dueDate: new Date('2026-04-10'), paidDate: new Date('2026-04-09'), status: FeeStatus.PAID, receiptUrl: '/receipts/f6.pdf', instituteId },
+      { studentId: studentsMap['sofia@tuition.com'], amount: 150, month: 'April 2026', dueDate: new Date('2026-04-10'), paidDate: new Date('2026-04-10'), status: FeeStatus.PAID, receiptUrl: '/receipts/f7.pdf', instituteId },
     ],
   });
 
@@ -207,6 +218,7 @@ async function main() {
       durationMin: 15,
       difficulty: 'MEDIUM',
       isAiGenerated: false,
+      instituteId,
       questions: [
         {
           id: 'q1_1',
@@ -239,14 +251,15 @@ async function main() {
       accuracyPct: 100,
       xpGained: 120,
       answers: { q1_1: '3', q1_2: '1' },
+      instituteId,
     },
   });
 
   console.log('Seeding resources materials...');
   await prisma.studyMaterial.createMany({
     data: [
-      { title: 'Electrostatics Formula Sheet', description: 'Formulas for Electric fields, potential, and capacitance.', fileType: 'PDF', fileUrl: '/materials/electrostatics_formulas.pdf', subject: 'Physics', batch: 'Alpha Batch' },
-      { title: 'Calculus Integration Cheat Sheet', description: 'Quick guides on standard integration formats.', fileType: 'Notes', fileUrl: '/materials/calculus_integration.pdf', subject: 'Mathematics', batch: 'Alpha Batch' },
+      { title: 'Electrostatics Formula Sheet', description: 'Formulas for Electric fields, potential, and capacitance.', fileType: 'PDF', fileUrl: '/materials/electrostatics_formulas.pdf', subject: 'Physics', batch: 'Alpha Batch', instituteId },
+      { title: 'Calculus Integration Cheat Sheet', description: 'Quick guides on standard integration formats.', fileType: 'Notes', fileUrl: '/materials/calculus_integration.pdf', subject: 'Mathematics', batch: 'Alpha Batch', instituteId },
     ],
   });
 
@@ -261,6 +274,7 @@ async function main() {
           'Focus on moment of inertia calculations. Solve 5 rotational equilibrium MCQs.',
           'Maintain consistency: excellent work holding a 5-day quiz streak!',
         ],
+        instituteId,
       },
     ],
   });

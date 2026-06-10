@@ -34,11 +34,12 @@ export async function GET(req: NextRequest) {
       return authResult.response;
     }
 
-    const { role, studentId } = authResult.user;
+    const { role, studentId, instituteId } = authResult.user;
 
     let records;
     if (role === 'ADMIN') {
       records = await prisma.feeHistory.findMany({
+        where: { instituteId },
         orderBy: { dueDate: 'desc' }
       });
     } else {
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Student record not linked' }, { status: 400 });
       }
       records = await prisma.feeHistory.findMany({
-        where: { studentId },
+        where: { studentId, instituteId },
         orderBy: { dueDate: 'desc' }
       });
     }
@@ -81,7 +82,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Month and dueDate are required' }, { status: 400 });
       }
 
-      const activeStudents = await prisma.student.findMany();
+      const instituteId = authResult.user.instituteId;
+      const activeStudents = await prisma.student.findMany({ where: { instituteId } });
       let createdCount = 0;
 
       for (const student of activeStudents) {
@@ -94,7 +96,10 @@ export async function POST(req: NextRequest) {
         });
 
         if (!exists) {
-          const amount = student.batch === 'Alpha Batch' ? 150.0 : 120.0;
+          // Prefer the student's configured monthly fee; fall back to a batch default.
+          const amount = student.monthlyFee && student.monthlyFee > 0
+            ? student.monthlyFee
+            : (student.batch === 'Alpha Batch' ? 150.0 : 120.0);
           const invoiceId = `f-${student.id}-${month.replace(/\s+/g, '').toLowerCase()}`;
 
           await prisma.feeHistory.create({
@@ -104,7 +109,8 @@ export async function POST(req: NextRequest) {
               amount,
               month,
               dueDate: new Date(dueDate),
-              status: FeeStatus.UNPAID
+              status: FeeStatus.UNPAID,
+              instituteId
             }
           });
 
@@ -115,7 +121,8 @@ export async function POST(req: NextRequest) {
               studentId: student.id,
               title: `New Invoice Issued: ${month}`,
               message: `Tuition fee of $${amount} is issued. Due date is ${new Date(dueDate).toLocaleDateString()}.`,
-              type: 'FEE'
+              type: 'FEE',
+              instituteId
             }
           });
 
@@ -133,8 +140,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'feeId is required' }, { status: 400 });
       }
 
-      const invoice = await prisma.feeHistory.findUnique({
-        where: { id: feeId }
+      const invoice = await prisma.feeHistory.findFirst({
+        where: { id: feeId, instituteId: authResult.user.instituteId }
       });
 
       if (!invoice) {
@@ -164,7 +171,8 @@ export async function POST(req: NextRequest) {
           studentId: invoice.studentId,
           title: 'Payment Confirmed',
           message: `Your payment of $${invoice.amount} has been processed successfully. Receipt is available.`,
-          type: 'FEE'
+          type: 'FEE',
+          instituteId: authResult.user.instituteId
         }
       });
 

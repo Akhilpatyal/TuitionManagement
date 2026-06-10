@@ -10,11 +10,12 @@ export async function GET(req: NextRequest) {
       return authResult.response;
     }
 
-    const { role, studentId } = authResult.user;
+    const { role, studentId, instituteId } = authResult.user;
 
     let alerts;
     if (role === 'ADMIN') {
       alerts = await prisma.notification.findMany({
+        where: { instituteId },
         orderBy: { createdAt: 'desc' }
       });
     } else {
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
       }
       alerts = await prisma.notification.findMany({
         where: {
+          instituteId,
           OR: [
             { studentId },
             { studentId: null }
@@ -54,7 +56,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Notification id is required' }, { status: 400 });
     }
 
-    const notif = await prisma.notification.findUnique({ where: { id } });
+    const notif = await prisma.notification.findFirst({ where: { id, instituteId: authResult.user.instituteId } });
     if (!notif) return NextResponse.json({ error: 'Alert not found' }, { status: 404 });
 
     if (authResult.user.role === 'STUDENT' && notif.studentId !== null && notif.studentId !== authResult.user.studentId) {
@@ -94,7 +96,8 @@ export async function POST(req: NextRequest) {
         studentId: studentId || null,
         title,
         message,
-        type
+        type,
+        instituteId: authResult.user.instituteId
       }
     });
     return NextResponse.json({ success: true, notification });

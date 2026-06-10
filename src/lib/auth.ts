@@ -5,9 +5,11 @@ import { prisma } from './prisma';
 const JWT_SECRET = process.env.JWT_SECRET || 'apex_tuition_hyper_quantum_encryption_secret_key_2026';
 const COOKIE_NAME = 'tms_session_token';
 
+export type AppRole = 'SUPER_ADMIN' | 'INSTITUTE_OWNER' | 'ADMIN' | 'TEACHER' | 'STUDENT';
+
 export interface TokenPayload {
   userId: string;
-  role: 'ADMIN' | 'STUDENT';
+  role: AppRole;
   email: string;
 }
 
@@ -49,6 +51,7 @@ export async function getSessionUser(req: NextRequest) {
       email: true,
       role: true,
       name: true,
+      instituteId: true,
       student: true
     }
   });
@@ -56,7 +59,7 @@ export async function getSessionUser(req: NextRequest) {
 }
 
 // Enforce specific role
-export async function requireAuth(req: NextRequest, allowedRoles?: ('ADMIN' | 'STUDENT')[]) {
+export async function requireAuth(req: NextRequest, allowedRoles?: AppRole[]) {
   const user = await getSessionUser(req);
   if (!user) {
     return { authenticated: false as const, response: NextResponse.json({ error: 'Session unauthorized' }, { status: 401 }) };
@@ -66,10 +69,11 @@ export async function requireAuth(req: NextRequest, allowedRoles?: ('ADMIN' | 'S
     return { authenticated: false as const, response: NextResponse.json({ error: 'Permission denied' }, { status: 403 }) };
   }
 
-  // Flatten studentId for convenience in API routes
+  // Flatten studentId + instituteId for convenience in API routes
   const augmentedUser = {
     ...user,
-    studentId: (user as any).student?.id || null
+    studentId: (user as any).student?.id || null,
+    instituteId: (user as any).instituteId as string
   };
 
   return { authenticated: true as const, user: augmentedUser };

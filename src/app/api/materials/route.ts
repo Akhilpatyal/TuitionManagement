@@ -10,11 +10,12 @@ export async function GET(req: NextRequest) {
       return authResult.response;
     }
 
-    const { role, studentId } = authResult.user;
+    const { role, studentId, instituteId } = authResult.user;
 
     let materials;
     if (role === 'ADMIN') {
       materials = await prisma.studyMaterial.findMany({
+        where: { instituteId },
         orderBy: { uploadedAt: 'desc' }
       });
     } else {
@@ -22,8 +23,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Student record not linked' }, { status: 400 });
       }
 
-      const student = await prisma.student.findUnique({
-        where: { id: studentId }
+      const student = await prisma.student.findFirst({
+        where: { id: studentId, instituteId }
       });
 
       if (!student) {
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
 
       materials = await prisma.studyMaterial.findMany({
         where: {
+          instituteId,
           OR: [
             { batch: student.batch },
             { batch: 'All Batches' }
@@ -59,6 +61,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { title, description, fileType, fileUrl, content, subject, batch } = body;
+    const instituteId = authResult.user.instituteId;
 
     if (!title || !fileType || !subject || !batch) {
       return NextResponse.json({ error: 'Missing required catalog parameters' }, { status: 400 });
@@ -77,13 +80,15 @@ export async function POST(req: NextRequest) {
         fileUrl: fileUrl || null,
         content: content || null,
         subject,
-        batch
+        batch,
+        instituteId
       }
     });
 
     // Notify students
     const students = await prisma.student.findMany({
       where: {
+        instituteId,
         OR: [
           { batch },
           { batch: 'All Batches' }
@@ -97,7 +102,8 @@ export async function POST(req: NextRequest) {
           studentId: student.id,
           title: `Study Material Uploaded`,
           message: `New ${fileType} titled "${title}" is available for ${subject}.`,
-          type: 'SYSTEM'
+          type: 'SYSTEM',
+          instituteId
         }
       });
     }
@@ -124,9 +130,12 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Missing ID param' }, { status: 400 });
     }
 
-    await prisma.studyMaterial.delete({
-      where: { id }
+    const deleted = await prisma.studyMaterial.deleteMany({
+      where: { id, instituteId: authResult.user.instituteId }
     });
+    if (deleted.count === 0) {
+      return NextResponse.json({ error: 'Material not found' }, { status: 404 });
+    }
     return NextResponse.json({ success: true });
 
   } catch (e: any) {

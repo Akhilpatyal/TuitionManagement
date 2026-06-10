@@ -16,10 +16,10 @@ export async function PUT(
 
     const { id } = await params;
     const body = await req.json();
-    const { name, email, class: className, batch, parentContact, subjects } = body;
+    const { name, email, class: className, batch, parentContact, subjects, monthlyFee } = body;
 
-    const student = await prisma.student.findUnique({
-      where: { id },
+    const student = await prisma.student.findFirst({
+      where: { id, instituteId: authResult.user.instituteId },
       include: { user: true }
     });
 
@@ -43,7 +43,8 @@ export async function PUT(
           class: className,
           batch,
           parentContact,
-          subjects
+          subjects,
+          ...(monthlyFee !== undefined ? { monthlyFee: Number(monthlyFee) || 0 } : {})
         }
       });
     });
@@ -68,9 +69,10 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    const instituteId = authResult.user.instituteId;
 
-    const student = await prisma.student.findUnique({
-      where: { id }
+    const student = await prisma.student.findFirst({
+      where: { id, instituteId }
     });
 
     if (!student) {
@@ -82,7 +84,7 @@ export async function DELETE(
       where: { id: student.userId }
     });
 
-    await recalculateStudentRanks();
+    await recalculateStudentRanks(instituteId);
 
     return NextResponse.json({ success: true });
 

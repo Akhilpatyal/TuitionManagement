@@ -6,7 +6,7 @@ import { QuizType, Prisma } from '@prisma/client';
 import { recalculateStudentRanks } from '../students/route';
 
 // Helper to generate a student's diagnostic AI report based on their quiz histories
-async function generateStudentAIReport(studentId: string) {
+async function generateStudentAIReport(studentId: string, instituteId: string) {
   try {
     const attempts = await prisma.quizAttempt.findMany({
       where: { studentId },
@@ -72,7 +72,8 @@ async function generateStudentAIReport(studentId: string) {
           studentId,
           weakTopics,
           strongTopics,
-          suggestions
+          suggestions,
+          instituteId
         }
       });
     }
@@ -89,14 +90,14 @@ export async function GET(req: NextRequest) {
       return authResult.response;
     }
 
-    const { role, studentId } = authResult.user;
+    const { role, studentId, instituteId } = authResult.user;
     const { searchParams } = new URL(req.url);
     const quizId = searchParams.get('id');
     const loadAttempts = searchParams.get('attempts');
 
     // 1. Fetch specific quiz details
     if (quizId) {
-      const quiz = await prisma.quiz.findUnique({ where: { id: quizId } });
+      const quiz = await prisma.quiz.findFirst({ where: { id: quizId, instituteId } });
       if (!quiz) {
         return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
       }
@@ -107,6 +108,7 @@ export async function GET(req: NextRequest) {
     if (loadAttempts === 'true') {
       if (role === 'ADMIN') {
         const attempts = await prisma.quizAttempt.findMany({
+          where: { instituteId },
           include: {
             quiz: {
               select: {
@@ -121,7 +123,7 @@ export async function GET(req: NextRequest) {
       } else {
         if (!studentId) return NextResponse.json({ error: 'Student not linked' }, { status: 400 });
         const attempts = await prisma.quizAttempt.findMany({
-          where: { studentId },
+          where: { studentId, instituteId },
           include: {
             quiz: {
               select: {
@@ -140,11 +142,12 @@ export async function GET(req: NextRequest) {
     let quizzes;
     if (role === 'ADMIN') {
       quizzes = await prisma.quiz.findMany({
+        where: { instituteId },
         orderBy: { createdAt: 'desc' }
       });
     } else {
       if (!studentId) return NextResponse.json({ error: 'Student not linked' }, { status: 400 });
-      const studentObj = await prisma.student.findUnique({ where: { id: studentId } });
+      const studentObj = await prisma.student.findFirst({ where: { id: studentId, instituteId } });
       if (!studentObj) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
 
       // Fetch completed quiz IDs to exclude
@@ -156,6 +159,7 @@ export async function GET(req: NextRequest) {
 
       quizzes = await prisma.quiz.findMany({
         where: {
+          instituteId,
           OR: [
             { studentId: studentId },
             {
@@ -202,6 +206,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Missing generation parameters' }, { status: 400 });
       }
 
+      const instituteId = authResult.user.instituteId;
+
       // Clamp requested question count to a sane range (default 30).
       const questionCount = Math.min(Math.max(parseInt(numQuestions, 10) || 30, 1), 50);
 
@@ -210,8 +216,8 @@ export async function POST(req: NextRequest) {
 
       try {
         if (difficulty === 'ADAPTIVE' && targetStudentId) {
-          const student = await prisma.student.findUnique({
-            where: { id: targetStudentId },
+          const student = await prisma.student.findFirst({
+            where: { id: targetStudentId, instituteId },
             include: { aiReports: true }
           });
 
@@ -254,7 +260,8 @@ export async function POST(req: NextRequest) {
         difficulty: activeDifficulty,
         isAiGenerated: true,
         sourceFile: fileName,
-        studentId: targetStudentId || null
+        studentId: targetStudentId || null,
+        instituteId
       };
 
       const quiz = await prisma.quiz.create({
@@ -268,12 +275,14 @@ export async function POST(req: NextRequest) {
             studentId: targetStudentId,
             title: `New AI Quiz Assigned`,
             message: `A personalized AI Quiz "${quiz.title}" has been assigned to you.`,
-            type: 'QUIZ'
+            type: 'QUIZ',
+            instituteId
           }
         });
       } else {
         const targetStudents = await prisma.student.findMany({
           where: {
+            instituteId,
             OR: [
               { batch },
               { batch: 'All Batches' }
@@ -287,7 +296,8 @@ export async function POST(req: NextRequest) {
               studentId: student.id,
               title: `New AI Quiz Assigned`,
               message: `Quiz "${quiz.title}" has been assigned to your batch for subject ${subject}.`,
-              type: 'QUIZ'
+              type: 'QUIZ',
+              instituteId
             }
           });
         }
@@ -315,6 +325,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      const instituteId = authResult.user.instituteId;
+
       const quizData = {
         title,
         description: `Manually created quiz for ${batch}.`,
@@ -325,7 +337,8 @@ export async function POST(req: NextRequest) {
         questions: questions as any,
         difficulty: difficulty || 'MEDIUM',
         isAiGenerated: false,
-        studentId: targetStudentId || null
+        studentId: targetStudentId || null,
+        instituteId
       };
 
       const quiz = await prisma.quiz.create({ data: quizData });
@@ -337,12 +350,13 @@ export async function POST(req: NextRequest) {
             studentId: targetStudentId,
             title: 'New Quiz Assigned',
             message: `A new quiz "${quiz.title}" has been assigned to you.`,
-            type: 'QUIZ'
+            type: 'QUIZ',
+            instituteId
           }
         });
       } else {
         const targetStudents = await prisma.student.findMany({
-          where: { OR: [{ batch }, { batch: 'All Batches' }] }
+          where: { instituteId, OR: [{ batch }, { batch: 'All Batches' }] }
         });
         for (const student of targetStudents) {
           await prisma.notification.create({
@@ -350,7 +364,8 @@ export async function POST(req: NextRequest) {
               studentId: student.id,
               title: 'New Quiz Assigned',
               message: `Quiz "${quiz.title}" has been assigned to your batch for ${subject}.`,
-              type: 'QUIZ'
+              type: 'QUIZ',
+              instituteId
             }
           });
         }
@@ -367,12 +382,16 @@ export async function POST(req: NextRequest) {
 
       const { quizId, score, totalQuestions, correctAnswers, accuracyPct, xpGained, answers } = body;
       const studentId = authResult.user.studentId;
+      const instituteId = authResult.user.instituteId;
 
       if (!studentId || !quizId) {
         return NextResponse.json({ error: 'Missing attempt parameters' }, { status: 400 });
       }
 
-      const quiz = await prisma.quiz.findUnique({ where: { id: quizId } });
+      const quiz = await prisma.quiz.findFirst({ where: { id: quizId, instituteId } });
+      if (!quiz) {
+        return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
+      }
 
       // Save Attempt record
       const attempt = await prisma.quizAttempt.create({
@@ -384,13 +403,14 @@ export async function POST(req: NextRequest) {
             correctAnswers,
             accuracyPct,
             xpGained,
-            answers: answers as any
+            answers: answers as any,
+            instituteId
           }
         });
 
         // Update Student XP, streaks, and accuracy averages
-        const student = await prisma.student.findUnique({
-          where: { id: studentId },
+        const student = await prisma.student.findFirst({
+          where: { id: studentId, instituteId },
           include: { quizAttempts: true }
         });
 
@@ -420,8 +440,8 @@ export async function POST(req: NextRequest) {
             }
           });
 
-          await recalculateStudentRanks();
-          await generateStudentAIReport(studentId);
+          await recalculateStudentRanks(instituteId);
+          await generateStudentAIReport(studentId, instituteId);
         }
 
         return NextResponse.json({ success: true, attempt });
@@ -450,7 +470,10 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Missing ID param' }, { status: 400 });
     }
 
-    await prisma.quiz.delete({ where: { id } });
+    const deleted = await prisma.quiz.deleteMany({ where: { id, instituteId: authResult.user.instituteId } });
+    if (deleted.count === 0) {
+      return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
+    }
     return NextResponse.json({ success: true });
 
   } catch (e: any) {

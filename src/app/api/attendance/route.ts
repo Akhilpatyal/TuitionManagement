@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 
 // Helper to recalculate a student's cumulative attendance % and trigger warnings
-async function recalculateStudentAttendance(studentId: string) {
+async function recalculateStudentAttendance(studentId: string, instituteId: string) {
   try {
     const records = await prisma.attendance.findMany({
       where: { studentId }
@@ -35,7 +35,8 @@ async function recalculateStudentAttendance(studentId: string) {
             studentId,
             title: 'Attendance Critical Alert',
             message: `Your overall attendance has fallen to ${pct}%. Please maintain attendance above 75% to stay eligible for quizzes.`,
-            type: 'ATTENDANCE'
+            type: 'ATTENDANCE',
+            instituteId
           }
         });
       }
@@ -53,11 +54,12 @@ export async function GET(req: NextRequest) {
       return authResult.response;
     }
 
-    const { role, studentId } = authResult.user;
+    const { role, studentId, instituteId } = authResult.user;
 
     let records;
     if (role === 'ADMIN') {
       records = await prisma.attendance.findMany({
+        where: { instituteId },
         orderBy: { date: 'desc' }
       });
     } else {
@@ -65,7 +67,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Student record not linked' }, { status: 400 });
       }
       records = await prisma.attendance.findMany({
-        where: { studentId },
+        where: { studentId, instituteId },
         orderBy: { date: 'desc' }
       });
     }
@@ -88,9 +90,16 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { studentId, date, status } = body; // status: boolean
+    const instituteId = authResult.user.instituteId;
 
     if (!studentId || !date) {
       return NextResponse.json({ error: 'Missing studentId or date' }, { status: 400 });
+    }
+
+    // Ensure the student belongs to this institute
+    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId } });
+    if (!student) {
+      return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
 
     const targetDate = new Date(date);
@@ -107,11 +116,12 @@ export async function POST(req: NextRequest) {
       create: {
         studentId,
         date: targetDate,
-        status
+        status,
+        instituteId
       }
     });
 
-    await recalculateStudentAttendance(studentId);
+    await recalculateStudentAttendance(studentId, instituteId);
 
     return NextResponse.json({ success: true });
 
