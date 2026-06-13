@@ -45,6 +45,7 @@ type ReviewQuiz = {
 
 export default function StudentDashboard() {
   const [student, setStudent] = useState<any | null>(null);
+  const [studentName, setStudentName] = useState('');
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [attempts, setAttempts] = useState<any[]>([]);
   const [aiReport, setAiReport] = useState<StudentAIReport | null>(null);
@@ -95,6 +96,7 @@ export default function StudentDashboard() {
 
         const meData = await meRes.json();
         const studentProfile = meData.user?.student;
+        setStudentName(meData.user?.name || '');
         if (studentProfile) {
           // Set student profile with all computed ranks/stats
           setStudent(studentProfile);
@@ -129,6 +131,46 @@ export default function StudentDashboard() {
 
   if (!student) return null;
 
+  // ---- Real analytics derived from this student's attempts ----
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const weeklyXp = attempts
+    .filter((a) => new Date(a.completedAt).getTime() >= weekAgo)
+    .reduce((sum, a) => sum + (a.xpGained || 0), 0);
+
+  // Cumulative XP trajectory over time
+  const chrono = [...attempts].sort(
+    (a, b) => new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime()
+  );
+  const xpChart = (() => {
+    if (chrono.length < 2) return null;
+    let cum = 0;
+    const pts = chrono.map((a) => (cum += a.xpGained || 0));
+    const maxV = Math.max(...pts, 1);
+    const n = pts.length;
+    const xAt = (i: number) => 20 + (i / (n - 1)) * 460;
+    const yAt = (v: number) => 130 - (v / maxV) * 110;
+    const coords = pts.map((v, i) => ({ x: xAt(i), y: yAt(v) }));
+    const d = coords
+      .map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.x.toFixed(1)},${c.y.toFixed(1)}`)
+      .join(' ');
+    const area = `${d} L ${coords[coords.length - 1].x.toFixed(1)},140 L ${coords[0].x.toFixed(1)},140 Z`;
+    return { coords, d, area };
+  })();
+
+  // Subject-wise accuracy breakdown
+  const subjectMap: Record<string, number[]> = {};
+  attempts.forEach((a) => {
+    const subj = a.quiz?.subject || 'Other';
+    (subjectMap[subj] ||= []).push(a.accuracyPct || 0);
+  });
+  const subjectStats = Object.entries(subjectMap)
+    .map(([subject, accs]) => ({
+      subject,
+      avg: Math.round(accs.reduce((x, y) => x + y, 0) / accs.length),
+      count: accs.length
+    }))
+    .sort((a, b) => b.avg - a.avg);
+
   return (
     <div className="space-y-8">
       
@@ -144,7 +186,7 @@ export default function StudentDashboard() {
             <span className="text-xs font-mono font-bold text-indigo-400 uppercase tracking-wider">Apex Academy Portal</span>
           </div>
           <h2 className="text-xl font-bold text-white md:text-2xl">
-            Welcome back, {student.name}!
+            Welcome back, {studentName || 'Student'}!
           </h2>
           <p className="text-xs text-slate-400 max-w-xl">
             Your adaptive AI tutor has parsed your latest attempt histories. Head over to practice quizzes to target your key weak areas.
@@ -205,7 +247,7 @@ export default function StudentDashboard() {
           <div className="mt-4">
             <h3 className="text-2xl font-extrabold text-white font-mono">{student.xpPoints} XP</h3>
             <p className="text-[9px] text-purple-400 flex items-center gap-1 mt-1 font-semibold">
-              <span>+150 XP gained this week</span>
+              <span>{weeklyXp > 0 ? `+${weeklyXp} XP gained this week` : 'No XP gained this week yet'}</span>
             </p>
           </div>
         </div>
@@ -300,39 +342,75 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Performance Trend SVG Grid */}
+          {/* Performance XP Trajectory (real data) */}
           <div className="glass-card rounded-3xl p-6">
-            <h3 className="text-sm font-bold text-slate-200 mb-4 flex items-center gap-2">
-              <TrendingUp className="w-4.5 h-4.5 text-indigo-400" />
-              <span>Performance XP Trajectory</span>
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                <TrendingUp className="w-4.5 h-4.5 text-indigo-400" />
+                <span>Performance XP Trajectory</span>
+              </h3>
+              <span className="text-[10px] font-mono text-slate-500">{attempts.length} attempt{attempts.length === 1 ? '' : 's'}</span>
+            </div>
 
             <div className="h-44 w-full relative">
-              <svg viewBox="0 0 500 150" className="w-full h-full">
-                {/* Gridlines */}
-                <line x1="10" y1="20" x2="490" y2="20" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
-                <line x1="10" y1="65" x2="490" y2="65" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
-                <line x1="10" y1="110" x2="490" y2="110" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
-                
-                {/* Curve */}
-                <path 
-                  d="M 20,130 Q 120,90 220,110 T 420,40" 
-                  fill="none" 
-                  stroke="#a855f7" 
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                />
-                
-                <circle cx="20" cy="130" r="4" fill="#a855f7" />
-                <circle cx="120" cy="100" r="4" fill="#a855f7" />
-                <circle cx="220" cy="110" r="4" fill="#a855f7" />
-                <circle cx="320" cy="80" r="4" fill="#6366f1" />
-                <circle cx="420" cy="40" r="4" fill="#6366f1" />
-
-                <text x="15" y="145" fill="#64748b" fontSize="8" className="font-mono">Start</text>
-                <text x="415" y="145" fill="#64748b" fontSize="8" className="font-mono">Current</text>
-              </svg>
+              {xpChart ? (
+                <svg viewBox="0 0 500 150" className="w-full h-full">
+                  <defs>
+                    <linearGradient id="xpGlow" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#a855f7" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <line x1="10" y1="20" x2="490" y2="20" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
+                  <line x1="10" y1="75" x2="490" y2="75" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
+                  <line x1="10" y1="130" x2="490" y2="130" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
+                  <path d={xpChart.area} fill="url(#xpGlow)" />
+                  <path d={xpChart.d} fill="none" stroke="#a855f7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  {xpChart.coords.map((c, i) => (
+                    <circle key={i} cx={c.x} cy={c.y} r="3.5" fill={i === xpChart.coords.length - 1 ? '#6366f1' : '#a855f7'} stroke="#060913" strokeWidth="1.5" />
+                  ))}
+                  <text x="15" y="145" fill="#64748b" fontSize="8" className="font-mono">First quiz</text>
+                  <text x="430" y="145" fill="#64748b" fontSize="8" className="font-mono">Latest</text>
+                </svg>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center border border-dashed border-slate-900 rounded-2xl">
+                  <TrendingUp className="w-7 h-7 text-slate-700 mb-2" />
+                  <p className="text-xs text-slate-500 font-mono">Take at least 2 quizzes to see your XP trajectory.</p>
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* Subject-wise Accuracy Breakdown (real data) */}
+          <div className="glass-card rounded-3xl p-6">
+            <h3 className="text-sm font-bold text-slate-200 mb-4 flex items-center gap-2">
+              <Target className="w-4.5 h-4.5 text-emerald-400" />
+              <span>Subject-wise Accuracy</span>
+            </h3>
+
+            {subjectStats.length === 0 ? (
+              <p className="text-xs text-slate-500 font-mono text-center py-6">Complete a quiz to see your subject breakdown.</p>
+            ) : (
+              <div className="space-y-3.5">
+                {subjectStats.map((s) => (
+                  <div key={s.subject}>
+                    <div className="flex items-center justify-between mb-1 text-[11px]">
+                      <span className="font-semibold text-slate-300">{s.subject}</span>
+                      <span className="font-mono text-slate-400">
+                        <span className={s.avg >= 80 ? 'text-emerald-400' : s.avg >= 60 ? 'text-amber-400' : 'text-rose-400'}>{s.avg}%</span>
+                        <span className="text-slate-600"> · {s.count} quiz{s.count === 1 ? '' : 'zes'}</span>
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-900 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${s.avg >= 80 ? 'bg-emerald-500' : s.avg >= 60 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                        style={{ width: `${s.avg}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
         </div>

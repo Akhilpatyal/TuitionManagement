@@ -80,6 +80,12 @@ export default function StudentMaterials() {
       setFileAvailable(true);
       return;
     }
+    // Absolute URLs (e.g. Cloudflare R2) are served cross-origin — a HEAD probe
+    // can be blocked by CORS, so assume available and let the viewer load it.
+    if (/^https?:\/\//.test(viewerMaterial.fileUrl || '')) {
+      setFileAvailable(true);
+      return;
+    }
     let cancelled = false;
     setFileAvailable(null);
     fetch(viewerMaterial.fileUrl || '', { method: 'HEAD' })

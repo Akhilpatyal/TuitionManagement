@@ -11,11 +11,13 @@ import {
   BookOpen, 
   Trophy, 
   Sparkles, 
-  Bell, 
-  LogOut, 
-  Menu, 
+  Bell,
+  LogOut,
+  Menu,
   X,
-  GraduationCap
+  GraduationCap,
+  BrainCircuit,
+  MessagesSquare
 } from 'lucide-react';
 export interface User {
   id: string;
@@ -51,11 +53,14 @@ export default function Sidebar({ user, isOpen, setIsOpen }: SidebarProps) {
     { name: 'Fees tracking', href: '/admin/fees', icon: CreditCard },
     { name: 'Quiz generator', href: '/admin/quizzes', icon: Sparkles },
     { name: 'Study materials', href: '/admin/materials', icon: BookOpen },
+    { name: 'Class Doubts', href: '/admin/doubts', icon: MessagesSquare },
   ];
 
   const studentLinks = [
     { name: 'My Dashboard', href: '/student', icon: LayoutDashboard },
     { name: 'Practice Quizzes', href: '/student/quizzes', icon: Sparkles },
+    { name: 'AI Doubt Solver', href: '/student/ai-tutor', icon: BrainCircuit },
+    { name: 'Class Doubts', href: '/student/doubts', icon: MessagesSquare },
     { name: 'My Attendance', href: '/student/attendance', icon: CalendarCheck },
     { name: 'Fee Details', href: '/student/fees', icon: CreditCard },
     { name: 'Study Hub', href: '/student/materials', icon: BookOpen },

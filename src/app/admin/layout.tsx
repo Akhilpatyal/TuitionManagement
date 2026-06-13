@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Sidebar, { User } from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
-import { Sparkles, ShieldAlert } from 'lucide-react';
+import { Sparkles, ShieldAlert, Building2, ArrowLeft } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -12,6 +12,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [actingInstitute, setActingInstitute] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -25,9 +26,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         if (!data.user) {
           router.push('/');
         } else if (data.user.role !== 'ADMIN') {
-          router.push('/student');
+          router.push(data.user.realRole === 'SUPER_ADMIN' ? '/super-admin' : '/student');
         } else {
           setCurrentUser(data.user);
+          setActingInstitute(data.isImpersonating ? data.actingInstitute : null);
         }
       } catch (e) {
         console.error('Failed auth check:', e);
@@ -39,6 +41,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     checkAuth();
   }, [router]);
+
+  const exitImpersonation = async () => {
+    try {
+      await fetch('/api/super-admin/stop-impersonate', { method: 'POST' });
+    } catch {}
+    router.push('/super-admin');
+    router.refresh();
+  };
 
   if (loading) {
     return (
@@ -70,6 +80,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   else if (pathname.includes('/fees')) title = 'Financial Ledger';
   else if (pathname.includes('/quizzes')) title = 'AI Quiz generator';
   else if (pathname.includes('/materials')) title = 'Resource Vault';
+  else if (pathname.includes('/doubts')) title = 'Class Doubts';
 
   return (
     <div className="min-h-screen flex bg-slate-950 text-slate-100 font-sans relative">
@@ -84,8 +95,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Main Panel Viewport */}
       <div className="flex-1 flex flex-col lg:pl-72 z-10 relative">
+        {/* Super-admin impersonation banner */}
+        {actingInstitute && (
+          <div className="sticky top-0 z-30 flex items-center justify-between gap-3 px-4 sm:px-6 py-2.5 bg-gradient-to-r from-amber-500/15 to-orange-500/10 border-b border-amber-500/30 backdrop-blur-md">
+            <div className="flex items-center gap-2 text-xs text-amber-300 min-w-0">
+              <Building2 className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                Viewing <strong className="text-amber-200">{actingInstitute.name}</strong> as Super Admin
+              </span>
+            </div>
+            <button
+              onClick={exitImpersonation}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 hover:text-white text-[11px] font-bold transition-all cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Exit to Super Admin</span>
+            </button>
+          </div>
+        )}
+
         <Navbar user={currentUser} title={title} />
-        
+
         <main className="flex-1 p-6 lg:p-10 overflow-y-auto">
           {children}
         </main>

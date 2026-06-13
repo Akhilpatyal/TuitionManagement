@@ -17,6 +17,12 @@ import {
   Trash2,
   PenLine,
   ListChecks,
+  Copy,
+  Users,
+  ArrowUp,
+  ArrowDown,
+  X,
+  Check,
 } from "lucide-react";
 type StudentWithUser = Student & {
   name: string;
@@ -57,10 +63,14 @@ export default function QuizManagement() {
 
   // AI generation controls
   const [subject, setSubject] = useState("Physics");
+  const [aiClass, setAiClass] = useState("Grade 10");
   const [batch, setBatch] = useState("Alpha Batch");
   const [difficulty, setDifficulty] = useState<string>("ADAPTIVE");
   const [numQuestions, setNumQuestions] = useState(30);
   const [targetStudentId, setTargetStudentId] = useState("");
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+
+  const classOptions = Array.from({ length: 9 }, (_, i) => `Grade ${i + 4}`);
 
   // Generating states
   const [isGenerating, setIsGenerating] = useState(false);
@@ -180,6 +190,196 @@ export default function QuizManagement() {
     }
   };
 
+  // ---- Edit / Reassign / Duplicate existing quizzes ----
+  const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editSubject, setEditSubject] = useState("Physics");
+  const [editBatch, setEditBatch] = useState("Alpha Batch");
+  const [editDuration, setEditDuration] = useState(15);
+  const [editDifficulty, setEditDifficulty] = useState("MEDIUM");
+  const [editTargetStudentId, setEditTargetStudentId] = useState("");
+  const [editQuestions, setEditQuestions] = useState<ManualQuestion[]>([]);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const [reassignQuiz, setReassignQuiz] = useState<Quiz | null>(null);
+  const [reassignBatch, setReassignBatch] = useState("Alpha Batch");
+  const [reassignStudentId, setReassignStudentId] = useState("");
+  const [isReassigning, setIsReassigning] = useState(false);
+
+  const normalizeQ = (q: any): ManualQuestion => ({
+    type: q.type || "MCQ",
+    question: q.question || "",
+    options: q.options
+      ? [...q.options]
+      : q.type === "MCQ" || !q.type
+        ? ["", "", "", ""]
+        : undefined,
+    correctAnswer: String(q.correctAnswer ?? "0"),
+    explanation: q.explanation || "",
+  });
+
+  const openEditQuiz = (quiz: Quiz) => {
+    setEditingQuiz(quiz);
+    setEditTitle(quiz.title);
+    setEditSubject(quiz.subject);
+    setEditBatch(quiz.batch);
+    setEditDuration(quiz.durationMin);
+    setEditDifficulty(quiz.difficulty);
+    setEditTargetStudentId((quiz as any).studentId || "");
+    const qs = Array.isArray(quiz.questions) ? (quiz.questions as any[]) : [];
+    setEditQuestions(qs.length ? qs.map(normalizeQ) : [blankQuestion()]);
+  };
+
+  const editUpdate = (idx: number, patch: Partial<ManualQuestion>) =>
+    setEditQuestions((prev) =>
+      prev.map((q, i) => (i === idx ? { ...q, ...patch } : q)),
+    );
+  const editChangeType = (idx: number, type: string) => {
+    if (type === "MCQ")
+      editUpdate(idx, { type, options: ["", "", "", ""], correctAnswer: "0" });
+    else if (type === "TRUE_FALSE")
+      editUpdate(idx, { type, options: undefined, correctAnswer: "true" });
+    else editUpdate(idx, { type, options: undefined, correctAnswer: "" });
+  };
+  const editUpdateOption = (qIdx: number, oIdx: number, value: string) =>
+    setEditQuestions((prev) =>
+      prev.map((q, i) => {
+        if (i !== qIdx || !q.options) return q;
+        return {
+          ...q,
+          options: q.options.map((o, j) => (j === oIdx ? value : o)),
+        };
+      }),
+    );
+  const editAddQuestion = () =>
+    setEditQuestions((prev) => [...prev, blankQuestion()]);
+  const editRemoveQuestion = (idx: number) =>
+    setEditQuestions((prev) =>
+      prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev,
+    );
+  const editMoveQuestion = (idx: number, dir: -1 | 1) =>
+    setEditQuestions((prev) => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+
+  const validateQuestions = (qs: ManualQuestion[]): string | null => {
+    for (let i = 0; i < qs.length; i++) {
+      const q = qs[i];
+      if (!q.question.trim()) return `Question ${i + 1} is empty.`;
+      if (q.type === "MCQ") {
+        if (!q.options || q.options.some((o) => !o.trim()))
+          return `Fill all 4 options for question ${i + 1}.`;
+      } else if (q.type === "SHORT_ANSWER" && !q.correctAnswer.trim()) {
+        return `Provide the correct answer for question ${i + 1}.`;
+      }
+    }
+    return null;
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingQuiz) return;
+    if (!editTitle.trim()) {
+      alert("Please enter a quiz title.");
+      return;
+    }
+    const err = validateQuestions(editQuestions);
+    if (err) {
+      alert(err);
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch("/api/quizzes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_quiz",
+          quizId: editingQuiz.id,
+          title: editTitle,
+          subject: editSubject,
+          batch: editBatch,
+          durationMin: editDuration,
+          difficulty: editDifficulty,
+          questions: editQuestions,
+          targetStudentId: editTargetStudentId || null,
+        }),
+      });
+      if (res.ok) {
+        setEditingQuiz(null);
+        fetchQuizzesAndStudents();
+        alert("Quiz updated successfully.");
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to update quiz.");
+      }
+    } catch (e) {
+      console.error("Update quiz failed:", e);
+      alert("Failed to update quiz.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const openReassign = (quiz: Quiz) => {
+    setReassignQuiz(quiz);
+    setReassignBatch(quiz.batch);
+    setReassignStudentId((quiz as any).studentId || "");
+  };
+
+  const handleReassign = async () => {
+    if (!reassignQuiz) return;
+    setIsReassigning(true);
+    try {
+      const res = await fetch("/api/quizzes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reassign_quiz",
+          quizId: reassignQuiz.id,
+          batch: reassignBatch,
+          targetStudentId: reassignStudentId || undefined,
+        }),
+      });
+      if (res.ok) {
+        setReassignQuiz(null);
+        fetchQuizzesAndStudents();
+        alert("Quiz reassigned and students notified.");
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to reassign quiz.");
+      }
+    } catch (e) {
+      console.error("Reassign failed:", e);
+      alert("Failed to reassign quiz.");
+    } finally {
+      setIsReassigning(false);
+    }
+  };
+
+  const handleDuplicateQuiz = async (quiz: Quiz) => {
+    try {
+      const res = await fetch("/api/quizzes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "duplicate_quiz", quizId: quiz.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await fetchQuizzesAndStudents();
+        // Open the new copy in the editor so it can be modified right away
+        if (data.quiz) openEditQuiz(data.quiz);
+      } else {
+        alert("Failed to duplicate quiz.");
+      }
+    } catch (e) {
+      console.error("Duplicate failed:", e);
+    }
+  };
+
   const fetchQuizzesAndStudents = async () => {
     try {
       const [studentsRes, quizzesRes] = await Promise.all([
@@ -257,6 +457,7 @@ export default function QuizManagement() {
       if (res.ok) {
         const data = await res.json();
         setUploadedFile(data.name);
+        setUploadedFileUrl(data.url || null);
         setSubject(detectSubject(data.name));
         setGeneratedQuiz(null);
       } else {
@@ -273,6 +474,7 @@ export default function QuizManagement() {
 
   const handleSimulateUpload = (fileName: string, detectedSubject: string) => {
     setUploadedFile(fileName);
+    setUploadedFileUrl(null); // demo templates have no real file content
     setSubject(detectedSubject);
     setGeneratedQuiz(null);
   };
@@ -334,10 +536,12 @@ export default function QuizManagement() {
               action: "generate_ai",
               title: uploadedFile.split(".")[0].replace(/_/g, " "),
               subject,
+              className: aiClass,
               batch,
               difficulty,
               numQuestions,
               fileName: uploadedFile,
+              fileUrl: uploadedFileUrl || undefined,
               targetStudentId: targetStudentId || undefined,
             }),
           });
@@ -362,6 +566,7 @@ export default function QuizManagement() {
   const handlePublishQuiz = () => {
     setGeneratedQuiz(null);
     setUploadedFile(null);
+    setUploadedFileUrl(null);
     alert(
       "AI-generated quiz successfully published and dispatched to student dashboards.",
     );
@@ -510,6 +715,7 @@ export default function QuizManagement() {
                   <button
                     onClick={() => {
                       setUploadedFile(null);
+                      setUploadedFileUrl(null);
                       setGeneratedQuiz(null);
                     }}
                     className="text-xs text-slate-500 hover:text-rose-400 font-bold shrink-0 ml-3 transition-colors"
@@ -531,16 +737,59 @@ export default function QuizManagement() {
                   onChange={(e) => setSubject(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:outline-none"
                 >
+                  <option value="English">English</option>
+                  <option value="Hindi">Hindi</option>
+                  <option value="Sanskrit">Sanskrit</option>
+                  <option value="French">French</option>
+                  <option value="German">German</option>
+
+                  <option value="Environmental Studies">
+                    Environmental Studies
+                  </option>
+                  <option value="Science">Science</option>
+                  <option value="Social Science">Social Science</option>
+                  <option value="History">History</option>
+                  <option value="Geography">Geography</option>
+                  <option value="Political Science">Political Science</option>
+                  <option value="Civics">Civics</option>
+
                   <option value="Physics">Physics</option>
                   <option value="Chemistry">Chemistry</option>
+                  <option value="Biology">Biology</option>
                   <option value="Mathematics">Mathematics</option>
+
                   <option value="Accountancy">Accountancy</option>
                   <option value="Business Studies">Business Studies</option>
                   <option value="Economics">Economics</option>
+                  <option value="Entrepreneurship">Entrepreneurship</option>
+
+                  <option value="Computer Science">Computer Science</option>
                   <option value="Informatics Practices">
                     Informatics Practices
                   </option>
-                  <option value="Computer Science">Computer Science</option>
+                  <option value="Information Technology">
+                    Information Technology
+                  </option>
+                  <option value="Artificial Intelligence">
+                    Artificial Intelligence
+                  </option>
+
+                  <option value="Physical Education">Physical Education</option>
+                  <option value="Health & Wellness">Health & Wellness</option>
+                  <option value="Yoga">Yoga</option>
+
+                  <option value="General Knowledge">General Knowledge</option>
+                  <option value="Moral Science">Moral Science</option>
+                  <option value="Drawing & Art">Drawing & Art</option>
+                  <option value="Music">Music</option>
+
+                  <option value="JEE Physics">JEE Physics</option>
+                  <option value="JEE Chemistry">JEE Chemistry</option>
+                  <option value="JEE Mathematics">JEE Mathematics</option>
+
+                  <option value="NEET Physics">NEET Physics</option>
+                  <option value="NEET Chemistry">NEET Chemistry</option>
+                  <option value="NEET Biology">NEET Biology</option>
                 </select>
               </div>
 
@@ -561,6 +810,23 @@ export default function QuizManagement() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-xs text-slate-300">
+              <div>
+                <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">
+                  Class / Grade
+                </label>
+                <select
+                  value={aiClass}
+                  onChange={(e) => setAiClass(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:outline-none"
+                >
+                  {classOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">
                   Difficulty Profile
@@ -784,16 +1050,59 @@ export default function QuizManagement() {
                 onChange={(e) => setManualSubject(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:outline-none"
               >
+                <option value="English">English</option>
+                <option value="Hindi">Hindi</option>
+                <option value="Sanskrit">Sanskrit</option>
+                <option value="French">French</option>
+                <option value="German">German</option>
+
+                <option value="Environmental Studies">
+                  Environmental Studies
+                </option>
+                <option value="Science">Science</option>
+                <option value="Social Science">Social Science</option>
+                <option value="History">History</option>
+                <option value="Geography">Geography</option>
+                <option value="Political Science">Political Science</option>
+                <option value="Civics">Civics</option>
+
                 <option value="Physics">Physics</option>
                 <option value="Chemistry">Chemistry</option>
+                <option value="Biology">Biology</option>
                 <option value="Mathematics">Mathematics</option>
+
                 <option value="Accountancy">Accountancy</option>
                 <option value="Business Studies">Business Studies</option>
                 <option value="Economics">Economics</option>
+                <option value="Entrepreneurship">Entrepreneurship</option>
+
+                <option value="Computer Science">Computer Science</option>
                 <option value="Informatics Practices">
                   Informatics Practices
                 </option>
-                <option value="Computer Science">Computer Science</option>
+                <option value="Information Technology">
+                  Information Technology
+                </option>
+                <option value="Artificial Intelligence">
+                  Artificial Intelligence
+                </option>
+
+                <option value="Physical Education">Physical Education</option>
+                <option value="Health & Wellness">Health & Wellness</option>
+                <option value="Yoga">Yoga</option>
+
+                <option value="General Knowledge">General Knowledge</option>
+                <option value="Moral Science">Moral Science</option>
+                <option value="Drawing & Art">Drawing & Art</option>
+                <option value="Music">Music</option>
+
+                <option value="JEE Physics">JEE Physics</option>
+                <option value="JEE Chemistry">JEE Chemistry</option>
+                <option value="JEE Mathematics">JEE Mathematics</option>
+
+                <option value="NEET Physics">NEET Physics</option>
+                <option value="NEET Chemistry">NEET Chemistry</option>
+                <option value="NEET Biology">NEET Biology</option>
               </select>
             </div>
             <div>
@@ -1078,17 +1387,430 @@ export default function QuizManagement() {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleDeleteQuiz(quiz.id)}
-                className="p-2 rounded-xl bg-slate-950 hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 border border-slate-900 hover:border-rose-500/25 transition-all duration-200"
-                title="Purge Quiz"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => openEditQuiz(quiz)}
+                  className="p-2 rounded-xl bg-slate-950 hover:bg-indigo-500/10 text-slate-500 hover:text-indigo-400 border border-slate-900 hover:border-indigo-500/25 transition-all duration-200"
+                  title="Edit quiz & questions"
+                >
+                  <PenLine className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => openReassign(quiz)}
+                  className="p-2 rounded-xl bg-slate-950 hover:bg-cyan-500/10 text-slate-500 hover:text-cyan-400 border border-slate-900 hover:border-cyan-500/25 transition-all duration-200"
+                  title="Reassign to student / batch"
+                >
+                  <Users className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDuplicateQuiz(quiz)}
+                  className="p-2 rounded-xl bg-slate-950 hover:bg-purple-500/10 text-slate-500 hover:text-purple-400 border border-slate-900 hover:border-purple-500/25 transition-all duration-200"
+                  title="Duplicate for reuse"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDeleteQuiz(quiz.id)}
+                  className="p-2 rounded-xl bg-slate-950 hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 border border-slate-900 hover:border-rose-500/25 transition-all duration-200"
+                  title="Purge Quiz"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Reassign Modal */}
+      {reassignQuiz && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#04060d]/80 backdrop-blur-md"
+          onClick={() => setReassignQuiz(null)}
+        >
+          <div
+            className="w-full max-w-md glass-card rounded-3xl p-6 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setReassignQuiz(null)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2 mb-1">
+              <Users className="w-4 h-4 text-cyan-400" />
+              <span className="text-[10px] font-mono font-bold tracking-wider text-cyan-400 uppercase">
+                Reassign
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-white mb-1">
+              {reassignQuiz.title}
+            </h3>
+            <p className="text-[11px] text-slate-500 mb-6">
+              Assign this quiz to a different batch or a specific student.
+              They&apos;ll be notified.
+            </p>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">
+                  Assign to Batch
+                </label>
+                <select
+                  value={reassignBatch}
+                  onChange={(e) => setReassignBatch(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:outline-none text-slate-200"
+                >
+                  <option value="Alpha Batch">Alpha Batch</option>
+                  <option value="Beta Batch">Beta Batch</option>
+                  <option value="Gamma Batch">Gamma Batch</option>
+                  <option value="All Batches">All Batches</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">
+                  Assign to Student (Optional)
+                </label>
+                <select
+                  value={reassignStudentId}
+                  onChange={(e) => setReassignStudentId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:outline-none text-slate-200"
+                >
+                  <option value="">Whole Batch</option>
+                  {students.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setReassignQuiz(null)}
+                className="px-4 py-2 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-300 text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReassign}
+                disabled={isReassigning}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isReassigning ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Reassign</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Quiz Modal */}
+      {editingQuiz && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-[#04060d]/80 backdrop-blur-md"
+          onClick={() => setEditingQuiz(null)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[92vh] flex flex-col glass-card rounded-3xl relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 p-5 border-b border-slate-900/70">
+              <div className="flex items-center gap-2">
+                <PenLine className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-md font-bold text-slate-200">Edit Quiz</h3>
+              </div>
+              <button
+                onClick={() => setEditingQuiz(null)}
+                className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* Metadata */}
+              <div>
+                <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">
+                  Quiz Title
+                </label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-900 focus:border-indigo-500 focus:outline-none text-sm text-slate-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-slate-300">
+                <div>
+                  <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">
+                    Subject
+                  </label>
+                  <input
+                    type="text"
+                    value={editSubject}
+                    onChange={(e) => setEditSubject(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">
+                    Batch
+                  </label>
+                  <select
+                    value={editBatch}
+                    onChange={(e) => setEditBatch(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:outline-none"
+                  >
+                    <option value="Alpha Batch">Alpha Batch</option>
+                    <option value="Beta Batch">Beta Batch</option>
+                    <option value="Gamma Batch">Gamma Batch</option>
+                    <option value="All Batches">All Batches</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">
+                    Duration (Min)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editDuration}
+                    onChange={(e) =>
+                      setEditDuration(
+                        Math.max(parseInt(e.target.value, 10) || 1, 1),
+                      )
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">
+                    Assign Student
+                  </label>
+                  <select
+                    value={editTargetStudentId}
+                    onChange={(e) => setEditTargetStudentId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:outline-none"
+                  >
+                    <option value="">Whole Batch</option>
+                    {students.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Questions */}
+              <div className="space-y-4">
+                {editQuestions.map((q, idx) => (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-2xl bg-slate-900/30 border border-slate-900/80 space-y-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-mono font-bold text-purple-400 uppercase flex items-center gap-1.5">
+                        <ListChecks className="w-3.5 h-3.5" />
+                        Question {idx + 1}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => editMoveQuestion(idx, -1)}
+                          disabled={idx === 0}
+                          className="p-1.5 rounded-lg bg-slate-950 text-slate-500 hover:text-indigo-400 border border-slate-900 disabled:opacity-30 transition-all cursor-pointer"
+                          title="Move up"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editMoveQuestion(idx, 1)}
+                          disabled={idx === editQuestions.length - 1}
+                          className="p-1.5 rounded-lg bg-slate-950 text-slate-500 hover:text-indigo-400 border border-slate-900 disabled:opacity-30 transition-all cursor-pointer"
+                          title="Move down"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <select
+                          value={q.type}
+                          onChange={(e) => editChangeType(idx, e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-900 text-[11px] text-slate-300 focus:outline-none cursor-pointer"
+                        >
+                          <option value="MCQ">Multiple Choice</option>
+                          <option value="TRUE_FALSE">True / False</option>
+                          <option value="SHORT_ANSWER">Short Answer</option>
+                        </select>
+                        {editQuestions.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => editRemoveQuestion(idx)}
+                            className="p-1.5 rounded-lg bg-slate-950 text-slate-500 hover:text-rose-400 border border-slate-900 hover:border-rose-500/25 transition-all cursor-pointer"
+                            title="Remove"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <textarea
+                      value={q.question}
+                      onChange={(e) =>
+                        editUpdate(idx, { question: e.target.value })
+                      }
+                      placeholder="Question text..."
+                      rows={2}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:border-indigo-500 focus:outline-none text-xs text-slate-200"
+                    />
+
+                    {q.type === "MCQ" && q.options && (
+                      <div className="space-y-2">
+                        <span className="text-[9px] font-mono uppercase text-slate-600">
+                          Tap the letter to mark the correct option
+                        </span>
+                        {q.options.map((opt, oIdx) => {
+                          const isCorrect = q.correctAnswer === oIdx.toString();
+                          return (
+                            <div key={oIdx} className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  editUpdate(idx, {
+                                    correctAnswer: oIdx.toString(),
+                                  })
+                                }
+                                className={`w-6 h-6 shrink-0 rounded-lg flex items-center justify-center text-[10px] font-mono font-bold border transition-all cursor-pointer ${
+                                  isCorrect
+                                    ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
+                                    : "bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700"
+                                }`}
+                              >
+                                {String.fromCharCode(65 + oIdx)}
+                              </button>
+                              <input
+                                type="text"
+                                value={opt}
+                                onChange={(e) =>
+                                  editUpdateOption(idx, oIdx, e.target.value)
+                                }
+                                placeholder={`Option ${String.fromCharCode(65 + oIdx)}`}
+                                className={`flex-1 px-3 py-1.5 rounded-lg bg-slate-950 border text-xs text-slate-200 focus:outline-none ${
+                                  isCorrect
+                                    ? "border-emerald-500/30"
+                                    : "border-slate-900 focus:border-indigo-500"
+                                }`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {q.type === "TRUE_FALSE" && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {["true", "false"].map((val) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() =>
+                              editUpdate(idx, { correctAnswer: val })
+                            }
+                            className={`py-2 rounded-xl border text-xs font-bold uppercase transition-all cursor-pointer ${
+                              q.correctAnswer === val
+                                ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
+                                : "bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-200"
+                            }`}
+                          >
+                            {val}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {q.type === "SHORT_ANSWER" && (
+                      <div>
+                        <label className="block text-[9px] font-mono uppercase text-slate-600 mb-1">
+                          Correct Answer
+                        </label>
+                        <input
+                          type="text"
+                          value={q.correctAnswer}
+                          onChange={(e) =>
+                            editUpdate(idx, { correctAnswer: e.target.value })
+                          }
+                          placeholder="Expected answer text"
+                          className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-900 focus:border-indigo-500 focus:outline-none text-xs text-slate-200"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[9px] font-mono uppercase text-slate-600 mb-1">
+                        Explanation (Optional)
+                      </label>
+                      <textarea
+                        value={q.explanation}
+                        onChange={(e) =>
+                          editUpdate(idx, { explanation: e.target.value })
+                        }
+                        rows={2}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-900 focus:border-indigo-500 focus:outline-none text-[11px] text-slate-300"
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={editAddQuestion}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer w-full"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Question</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-900/70 flex justify-end gap-3">
+              <button
+                onClick={() => setEditingQuiz(null)}
+                className="px-4 py-2 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-300 text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSavingEdit}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isSavingEdit ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Save Changes ({editQuestions.length})</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

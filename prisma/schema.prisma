@@ -46,6 +46,8 @@ model Institute {
   materials     StudyMaterial[]
   notifications Notification[]
   aiReports     AIReport[]
+  doubtPosts    DoubtPost[]
+  doubtReplies  DoubtReply[]
 }
 
 model User {
@@ -57,8 +59,8 @@ model User {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   student     Student?
-  instituteId String
-  institute   Institute  @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  instituteId String?    // null for SUPER_ADMIN (platform owner, not tied to an institute)
+  institute   Institute? @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }
 
 model Student {
@@ -84,6 +86,7 @@ model Student {
   notifications  Notification[]
   aiReports      AIReport[]
   quizzes        Quiz[]
+  doubtPosts     DoubtPost[]
   instituteId    String
   institute      Institute      @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 }
@@ -189,4 +192,32 @@ model AIReport {
   generatedAt DateTime @default(now())
   instituteId String
   institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+}
+
+model DoubtPost {
+  id          String       @id @default(uuid())
+  instituteId String
+  institute   Institute    @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  studentId   String       // author (the student who posted)
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  authorName  String
+  title       String
+  body        String
+  subject     String
+  batch       String
+  resolved    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  replies     DoubtReply[]
+}
+
+model DoubtReply {
+  id          String    @id @default(uuid())
+  doubtId     String
+  doubt       DoubtPost @relation(fields: [doubtId], references: [id], onDelete: Cascade)
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  authorName  String
+  authorRole  String    // STUDENT | ADMIN | TEACHER
+  body        String
+  createdAt   DateTime  @default(now())
 }

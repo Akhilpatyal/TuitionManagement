@@ -25,7 +25,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         if (!data.user) {
           router.push('/');
         } else if (data.user.role !== 'STUDENT') {
-          router.push('/admin');
+          router.push(data.user.role === 'SUPER_ADMIN' ? '/super-admin' : '/admin');
         } else {
           setCurrentUser(data.user);
         }

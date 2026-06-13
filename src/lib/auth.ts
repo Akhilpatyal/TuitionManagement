@@ -11,6 +11,7 @@ export interface TokenPayload {
   userId: string;
   role: AppRole;
   email: string;
+  actingInstituteId?: string; // set when a SUPER_ADMIN is impersonating an institute
 }
 
 // Sign session token
@@ -55,7 +56,9 @@ export async function getSessionUser(req: NextRequest) {
       student: true
     }
   });
-  return user;
+  if (!user) return null;
+  // Carry the impersonation claim from the token onto the session user
+  return { ...user, actingInstituteId: payload.actingInstituteId ?? null };
 }
 
 // Enforce specific role
@@ -65,15 +68,28 @@ export async function requireAuth(req: NextRequest, allowedRoles?: AppRole[]) {
     return { authenticated: false as const, response: NextResponse.json({ error: 'Session unauthorized' }, { status: 401 }) };
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role as any)) {
+  const realRole = (user as any).role as AppRole;
+  const actingInstituteId = (user as any).actingInstituteId || null;
+  const isImpersonating = realRole === 'SUPER_ADMIN' && !!actingInstituteId;
+
+  // While impersonating, a super admin acts as that institute's ADMIN
+  const effectiveRole: AppRole = isImpersonating ? 'ADMIN' : realRole;
+  const effectiveInstituteId: string | null = isImpersonating
+    ? actingInstituteId
+    : ((user as any).instituteId || null);
+
+  if (allowedRoles && !allowedRoles.includes(effectiveRole)) {
     return { authenticated: false as const, response: NextResponse.json({ error: 'Permission denied' }, { status: 403 }) };
   }
 
   // Flatten studentId + instituteId for convenience in API routes
   const augmentedUser = {
     ...user,
+    role: effectiveRole,
+    realRole,
+    isImpersonating,
     studentId: (user as any).student?.id || null,
-    instituteId: (user as any).instituteId as string
+    instituteId: effectiveInstituteId as string
   };
 
   return { authenticated: true as const, user: augmentedUser };

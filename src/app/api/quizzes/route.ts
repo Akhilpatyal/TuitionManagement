@@ -1,9 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { GeminiService } from '@/lib/aiService';
 import { QuizType, Prisma } from '@prisma/client';
 import { recalculateStudentRanks } from '../students/route';
+
+// Map a filename to a Gemini-supported mime type (only types Gemini can read natively)
+function docMimeType(name: string): string | null {
+  const ext = (name.split('?')[0].split('.').pop() || '').toLowerCase();
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'txt') return 'text/plain';
+  return null; // doc/docx etc. — not natively readable, fall back to subject-based
+}
+
+// Load an uploaded file (R2 URL or local /uploads path) as base64 for Gemini
+async function loadDocument(fileUrl?: string): Promise<{ mimeType: string; base64: string } | undefined> {
+  if (!fileUrl) return undefined;
+  const mimeType = docMimeType(fileUrl);
+  if (!mimeType) return undefined;
+  try {
+    let buffer: Buffer;
+    if (/^https?:\/\//.test(fileUrl)) {
+      const res = await fetch(fileUrl);
+      if (!res.ok) return undefined;
+      buffer = Buffer.from(await res.arrayBuffer());
+    } else if (fileUrl.startsWith('/uploads/')) {
+      buffer = await readFile(join(process.cwd(), 'public', fileUrl));
+    } else {
+      return undefined;
+    }
+    // Guard against very large inline payloads (~15MB cap)
+    if (buffer.length > 15 * 1024 * 1024) return undefined;
+    return { mimeType, base64: buffer.toString('base64') };
+  } catch (e) {
+    console.warn('Could not load source document for AI generation:', e);
+    return undefined;
+  }
+}
 
 // Helper to generate a student's diagnostic AI report based on their quiz histories
 async function generateStudentAIReport(studentId: string, instituteId: string) {
@@ -200,11 +237,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
       }
 
-      const { title, subject, batch, difficulty, fileName, targetStudentId, numQuestions } = body;
+      const { title, subject, className, batch, difficulty, fileName, fileUrl, targetStudentId, numQuestions } = body;
 
       if (!title || !subject || !batch || !difficulty || !fileName) {
         return NextResponse.json({ error: 'Missing generation parameters' }, { status: 400 });
       }
+
+      // Load the actual uploaded document so questions come from its content
+      const documentData = await loadDocument(fileUrl);
 
       const instituteId = authResult.user.instituteId;
 
@@ -243,15 +283,17 @@ export async function POST(req: NextRequest) {
       const genQuestions = await GeminiService.generateQuiz({
         title,
         subject,
+        className,
         difficulty: activeDifficulty,
         fileName,
         numQuestions: questionCount,
-        studentPerformanceLog: performanceLog
+        studentPerformanceLog: performanceLog,
+        documentData
       });
 
       const quizData = {
         title: `${title} [AI ${activeDifficulty}]`,
-        description: `Personalized AI generated quiz compiled from reference "${fileName}". Target batch: ${batch}.`,
+        description: `AI quiz${className ? ` for ${className}` : ''} compiled from reference "${fileName}". Subject: ${subject}. Target batch: ${batch}.`,
         type: genQuestions[0]?.type || QuizType.MCQ,
         batch,
         subject,
@@ -370,6 +412,127 @@ export async function POST(req: NextRequest) {
           });
         }
       }
+
+      return NextResponse.json({ success: true, quiz });
+    }
+
+    // A3. Update an existing quiz (Admin only) — edit metadata / questions
+    if (action === 'update_quiz') {
+      if (authResult.user.role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
+      }
+
+      const instituteId = authResult.user.instituteId;
+      const { quizId, title, subject, batch, durationMin, difficulty, questions, targetStudentId } = body;
+
+      if (!quizId) {
+        return NextResponse.json({ error: 'quizId is required' }, { status: 400 });
+      }
+
+      const existing = await prisma.quiz.findFirst({ where: { id: quizId, instituteId } });
+      if (!existing) {
+        return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
+      }
+
+      if (questions !== undefined && (!Array.isArray(questions) || questions.length === 0)) {
+        return NextResponse.json({ error: 'A quiz needs at least one question' }, { status: 400 });
+      }
+
+      const data: any = {};
+      if (title !== undefined) data.title = title;
+      if (subject !== undefined) data.subject = subject;
+      if (batch !== undefined) data.batch = batch;
+      if (durationMin !== undefined) data.durationMin = durationMin;
+      if (difficulty !== undefined) data.difficulty = difficulty;
+      if (questions !== undefined) {
+        data.questions = questions as any;
+        data.type = (questions[0].type || existing.type) as QuizType;
+      }
+      if (targetStudentId !== undefined) data.studentId = targetStudentId || null;
+
+      const quiz = await prisma.quiz.update({ where: { id: quizId }, data });
+      return NextResponse.json({ success: true, quiz });
+    }
+
+    // A4. Reassign a quiz to another student / batch (Admin only) — re-notifies
+    if (action === 'reassign_quiz') {
+      if (authResult.user.role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
+      }
+
+      const instituteId = authResult.user.instituteId;
+      const { quizId, batch, targetStudentId } = body;
+
+      const existing = await prisma.quiz.findFirst({ where: { id: quizId, instituteId } });
+      if (!existing) {
+        return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
+      }
+
+      const quiz = await prisma.quiz.update({
+        where: { id: quizId },
+        data: { batch: batch || existing.batch, studentId: targetStudentId || null }
+      });
+
+      // Notify the new target(s)
+      if (targetStudentId) {
+        await prisma.notification.create({
+          data: {
+            studentId: targetStudentId,
+            title: 'Quiz Assigned to You',
+            message: `The quiz "${quiz.title}" has been assigned to you.`,
+            type: 'QUIZ',
+            instituteId
+          }
+        });
+      } else {
+        const targetStudents = await prisma.student.findMany({
+          where: { instituteId, OR: [{ batch: quiz.batch }, { batch: 'All Batches' }] }
+        });
+        for (const student of targetStudents) {
+          await prisma.notification.create({
+            data: {
+              studentId: student.id,
+              title: 'New Quiz Assigned',
+              message: `Quiz "${quiz.title}" has been assigned to your batch.`,
+              type: 'QUIZ',
+              instituteId
+            }
+          });
+        }
+      }
+
+      return NextResponse.json({ success: true, quiz });
+    }
+
+    // A5. Duplicate a quiz (Admin only) — clone as a fresh, unassigned reusable copy
+    if (action === 'duplicate_quiz') {
+      if (authResult.user.role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
+      }
+
+      const instituteId = authResult.user.instituteId;
+      const { quizId } = body;
+
+      const existing = await prisma.quiz.findFirst({ where: { id: quizId, instituteId } });
+      if (!existing) {
+        return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
+      }
+
+      const quiz = await prisma.quiz.create({
+        data: {
+          title: `${existing.title} (Copy)`,
+          description: existing.description,
+          type: existing.type,
+          batch: existing.batch,
+          subject: existing.subject,
+          durationMin: existing.durationMin,
+          questions: existing.questions as any,
+          difficulty: existing.difficulty,
+          isAiGenerated: false,
+          studentId: null,
+          instituteId
+        }
+      });
 
       return NextResponse.json({ success: true, quiz });
     }

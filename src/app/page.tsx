@@ -20,7 +20,7 @@ export default function LoginPage() {
         if (res.ok) {
           const data = await res.json();
           if (data.user) {
-            router.push(data.user.role === 'ADMIN' ? '/admin' : '/student');
+            router.push(data.user.role === 'SUPER_ADMIN' ? '/super-admin' : data.user.role === 'ADMIN' ? '/admin' : '/student');
           }
         }
       } catch (e) {
